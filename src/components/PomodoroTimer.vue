@@ -35,8 +35,7 @@
       </div>
     </div>
 
-    <!-- Settings Sheet -->
-    <f7-sheet class="settings-sheet" style="height: auto" swipe-to-close backdrop @sheet:closed="onSettingsClosed">
+    <f7-sheet class="settings-sheet" style="height: auto" swipe-to-close backdrop @sheet:closed="onSettingsClosed" @sheet:opened="onSheetOpened">
       <f7-toolbar>
         <div class="left"></div>
         <div class="right">
@@ -47,12 +46,12 @@
         <f7-block-title>Timer Settings (Minutes)</f7-block-title>
         <f7-block-title>Work Duration (min)</f7-block-title>
         <f7-block strong-ios outline-ios class="no-padding">
-          <div id="work-picker" style="height: 160px; margin: 0 auto;"></div>
+          <div id="work-picker" style="height: 180px; margin: 0 auto;"></div>
         </f7-block>
 
         <f7-block-title>Break Duration (min)</f7-block-title>
         <f7-block strong-ios outline-ios class="no-padding">
-          <div id="break-picker" style="height: 160px; margin: 0 auto;"></div>
+          <div id="break-picker" style="height: 180px; margin: 0 auto;"></div>
         </f7-block>
       </f7-page-content>
     </f7-sheet>
@@ -92,6 +91,21 @@ const setMode = (newMode: 'work' | 'break') => {
   timeLeft.value = currentTargetTime.value
 }
 
+const saveHistory = (completedMode: 'work' | 'break', duration: number) => {
+  const record = {
+    mode: completedMode,
+    duration: duration,
+    timestamp: Date.now()
+  }
+  const existing = localStorage.getItem('pomodoro_history')
+  const history = existing ? JSON.parse(existing) : []
+  history.push(record)
+  localStorage.setItem('pomodoro_history', JSON.stringify(history))
+  
+  // Custom event to trigger History page hot reload
+  window.dispatchEvent(new Event('history-updated'))
+}
+
 const toggleTimer = () => {
   if (isRunning.value) {
     pauseTimer()
@@ -108,6 +122,8 @@ const startTimer = () => {
       timeLeft.value--
     } else {
       pauseTimer()
+      // Save full session length based on configured duration
+      saveHistory(mode.value, mode.value === 'work' ? workTimeMinutes.value : breakTimeMinutes.value)
       setMode(mode.value === 'work' ? 'break' : 'work')
     }
   }, 1000)
@@ -139,9 +155,12 @@ watch([workTimeMinutes, breakTimeMinutes], () => {
   }
 })
 
-onMounted(() => {
-  f7ready(() => {
-    f7.picker.create({
+let workPicker: any = null
+let breakPicker: any = null
+
+const onSheetOpened = () => {
+  if (!workPicker) {
+    workPicker = f7.picker.create({
       containerEl: '#work-picker',
       inline: true,
       value: [workTimeMinutes.value.toString()],
@@ -153,12 +172,16 @@ onMounted(() => {
       ],
       on: {
         change: function (picker: any, values: any) {
-          workTimeMinutes.value = Number(values[0])
+          if (values[0]) {
+            workTimeMinutes.value = Number(values[0])
+          }
         }
       }
     });
+  }
 
-    f7.picker.create({
+  if (!breakPicker) {
+    breakPicker = f7.picker.create({
       containerEl: '#break-picker',
       inline: true,
       value: [breakTimeMinutes.value.toString()],
@@ -170,15 +193,19 @@ onMounted(() => {
       ],
       on: {
         change: function (picker: any, values: any) {
-          breakTimeMinutes.value = Number(values[0])
+          if (values[0]) {
+            breakTimeMinutes.value = Number(values[0])
+          }
         }
       }
     });
-  });
-})
+  }
+}
 
 onUnmounted(() => {
   pauseTimer()
+  if (workPicker) workPicker.destroy()
+  if (breakPicker) breakPicker.destroy()
 })
 </script>
 
